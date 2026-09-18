@@ -161,10 +161,16 @@ def load_business_image(
         database_path.parent / profile[field_name]
     ).resolve()
 
-    if image_path.is_file():
+    if image_path.parent != image_directory:
+        raise BusinessImageValidationError(
+            "Lokasi gambar tersimpan tidak valid. "
+            "Silakan pilih ulang gambar."
+        )
+
+    if not image_path.is_file():
         raise BusinessImageValidationError(
             "File gambar tidak ditemukan. "
-            "Silahkan pilih ulang gambar."
+            "Silakan pilih ulang gambar."
         )
 
     data, _ = _read_image(image_path)

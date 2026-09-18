@@ -104,7 +104,7 @@ def build_business_logo(
 
         finally:
             pick_button.disabled = False
-            pick_button.contennt = "Pilih & Simpan Logo"
+            pick_button.content = "Pilih & Simpan Logo"
             page.update()
 
     pick_button = ft.Button(

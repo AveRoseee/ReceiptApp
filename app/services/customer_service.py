@@ -42,7 +42,7 @@ def _clean_customer(
 
     if cleaned["type"] not in {"PERSONAL", "COMPANY"}:
         raise CustomerValidationError(
-            "Tipe pelanggan harus PERSONEL atau COMPANY."
+            "Tipe pelanggan harus PERSONAL atau COMPANY."
         )
 
     if not cleaned["name"]:
@@ -92,7 +92,12 @@ def list_customers(
 
     if type(include_archived) is not bool:
         raise CustomerValidationError(
-            "Jumlah pelanggan per halaman harus 1 sampai 100"
+            "Pilihan Arsip harus berupa boolean"
+        )
+
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise CustomerValidationError(
+            "Jumlah pelanggan per halaman harus 1 sampai 100."
         )
 
     if (
