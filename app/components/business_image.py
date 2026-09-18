@@ -1,54 +1,68 @@
+from pathlib import Path
 import asyncio
 import logging
-from pathlib import Path
 import sqlite3
 
 import flet as ft
 
-from app.services.business_logo_service import (
+from app.services.business_image_service import (
     BusinessImageValidationError,
-    load_business_logo,
-    save_business_logo
+    load_business_image,
+    save_business_image,
 )
 from app.services.business_profile_service import (
-    ProfileValidationError
+    ProfileValidationError,
 )
 
 
 logger = logging.getLogger(__name__)
 
+IMAGE_LABELS = {
+    "qris": "QRIS",
+    "signature": "Tanda Tangan",
+    "stamp": "Stempel",
+}
 
-def build_business_logo(
+
+def build_business_image(
     page: ft.Page,
     database_path: Path,
+    image_type: str,
 ) -> ft.Column:
+    if image_type not in IMAGE_LABELS:
+        raise ValueError(
+            f"Jenis komponen gambar tidak dikenal: {image_type}"
+        )
+
+    title = IMAGE_LABELS[image_type]
+
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
 
     preview = ft.Image(
         src="",
-        width=180,
-        height=120,
+        width=220,
+        height=220 if image_type == "qris" else 140,
         fit=ft.BoxFit.CONTAIN,
         visible=False,
         error_content=ft.Text(
-            "Pratinjau logo tidak dapat ditampilkan."
+            "Pratinjau gambar tidak dapat ditampilkan."
         ),
     )
 
     message = ft.Text(
-        "Belum ada logo usaha.",
-        color=ft.Colors.GREY_700
+        f"Belum ada gambar {title.lower()}.",
+        color=ft.Colors.GREY_700,
     )
 
-    def display_logo(data: bytes) -> None:
+    def display_image(data: bytes) -> None:
         preview.src = data
         preview.visible = True
 
-        message.value = "Logo usaha tersimpan."
+        message.value = f"{title} tersimpan."
         message.color = ft.Colors.GREEN_700
 
-    async def handle_pick_logo(event) -> None:
+    async def handle_pick_image(event) -> None:
         if pick_button.disabled:
             return
 
@@ -57,7 +71,7 @@ def build_business_logo(
 
         try:
             selected_files = await file_picker.pick_files(
-                dialog_title="Pilih logo usaha",
+                dialog_title=f"Pilih gambar {title.lower()}",
                 file_type=ft.FilePickerFileType.CUSTOM,
                 allowed_extensions=["png", "jpg", "jpeg"],
                 allow_multiple=False,
@@ -71,20 +85,20 @@ def build_business_logo(
             if not selected_path:
                 raise BusinessImageValidationError(
                     "Lokasi gambar tidak tersedia. "
-                    "Gunakan aplikasi dekstop untuk memilih logo."
+                    "Gunakan aplikasi desktop."
                 )
 
-            pick_button.content = "Menyimpan Logo..."
+            pick_button.content = "Menyimpan..."
             page.update()
 
-
             data = await asyncio.to_thread(
-                save_business_logo,
+                save_business_image,
                 database_path,
                 Path(selected_path),
+                image_type,
             )
 
-            display_logo(data)
+            display_image(data)
 
         except (
             BusinessImageValidationError,
@@ -94,55 +108,63 @@ def build_business_logo(
             message.color = ft.Colors.RED_700
 
         except Exception:
-            logger.exception("Gagal memilih atau menyimpan logo")
+            logger.exception(
+                "Gagal memilih atau menyimpan gambar %s",
+                image_type,
+            )
 
             message.value = (
-                "Logo belum berhasil diproses. "
-                "Silahkan coba kembali."
+                "Gambar belum berhasil diproses. "
+                "Silakan coba kembali."
             )
             message.color = ft.Colors.RED_700
 
         finally:
             pick_button.disabled = False
-            pick_button.contennt = "Pilih & Simpan Logo"
+            pick_button.content = f"Pilih & Simpan {title}"
             page.update()
 
     pick_button = ft.Button(
-        content = "Pilih & Simpan Logo",
-        on_click = handle_pick_logo,
+        content=f"Pilih & Simpan {title}",
+        on_click=handle_pick_image,
     )
 
     try:
-        saved_logo = load_business_logo(database_path)
+        saved_image = load_business_image(
+            database_path,
+            image_type,
+        )
 
-        if saved_logo is not None:
-            display_logo(saved_logo)
+        if saved_image is not None:
+            display_image(saved_image)
 
     except BusinessImageValidationError as error:
         message.value = str(error)
         message.color = ft.Colors.RED_700
 
     except (sqlite3.Error, OSError):
-        logger.exception("Gagal membaca logo yang tersimpan")
+        logger.exception(
+            "Gagal membaca gambar %s",
+            image_type,
+        )
 
-        message.value = "Logo yang tersimpan belum dapat dimuat."
+        message.value = "Gambar tersimpan belum dapat dimuat."
         message.color = ft.Colors.RED_700
 
     return ft.Column(
         spacing=12,
         controls=[
             ft.Text(
-                "Logo Usaha",
+                title,
                 size=18,
                 weight=ft.FontWeight.BOLD,
             ),
             ft.Text(
-                "PNG atau JPG, maksimal 5 MB. "
-                "Simpan Profil usaha sebelum menambahkan logo.",
+                "PNG atau JPG, maksimal 5 MB.",
                 color=ft.Colors.GREY_700,
             ),
             preview,
             message,
-            pick_button
+            pick_button,
         ],
     )

@@ -13,6 +13,7 @@ from app.services.business_profile_service import (
     save_business_profile,
 )
 from app.components.business_logo import build_business_logo
+from app.components.business_image import build_business_image
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +234,25 @@ def build_business_profile_view(
                     fields["bank_account_name"],
                 ],
             ),
+            ft.Divider(),
+            build_business_image(
+                page,
+                database_path,
+                "qris",
+            ),
+            ft.Divider(),
+            build_business_image(
+                page,
+                database_path,
+                "signature",
+            ),
+            ft.Divider(),
+            build_business_image(
+                page,
+                database_path,
+                "stamp",
+            ),
+            ft.Divider(),
             status_text,
             ft.Row(
                 controls=[save_button],
