@@ -4,10 +4,9 @@ import sqlite3
 import flet as ft
 
 from app.database import initialize_database
-from app.views.business_profile_view import (
-    build_business_profile_view,
-)
+from app.views.business_profile_view import build_business_profile_view
 from app.views.customer_view import build_customer_view
+from app.views.catalog_view import build_catalog_view
 
 
 logger = logging.getLogger(__name__)
@@ -24,19 +23,23 @@ def main(page: ft.Page) -> None:
     try:
         database_path = initialize_database()
 
-        profile_view = build_business_profile_view(
-            page,
-            database_path,
-        )
+        views = {
+            "profile": build_business_profile_view(
+                page,
+                database_path,
+            ),
 
-        customer_view = build_customer_view(
-            page,
-            database_path,
-        )
+            "customers": build_customer_view(
+                page,
+                database_path,
+            ),
 
-        profile_view.visible = True
-        customer_view.visible = False
-
+            "catalog": build_catalog_view(
+                page,
+                database_path,
+            ),
+        }
+        
     except (sqlite3.Error, OSError, ValueError):
         logger.exception("Gagal menyiapkan aplikasi")
 
@@ -50,44 +53,42 @@ def main(page: ft.Page) -> None:
         return
 
     def switch_view(event) -> None:
-        show_profile = event.control.data == "profile"
+        selected = event.control.data
 
-        profile_view.visible = show_profile
-        customer_view.visible = not show_profile
-
-        profile_button.disabled = show_profile
-        customer_button.disabled = not show_profile
+        for key, view in views.items():
+            view.visible = key == selected
+            navigation_buttons[key].disabled = key == selected
 
         page.update()
 
-    profile_button = ft.TextButton(
-        content="Profil Usaha",
-        data="profile",
-        disabled=True,
-        on_click=switch_view,
-    )
+    labels = {
+        "profile": "Profil Usaha",
+        "customers": "Pelanggan",
+        "catalog": "Katalog",
+    }
 
-    customer_button = ft.TextButton(
-        content="Pelanggan",
-        data="customers",
-        on_click=switch_view,
-    )
+    navigation_buttons = {
+        key: ft.TextButton(
+            content = label,
+            data = key,
+            disabled = key == "profile",
+            on_click = switch_view,
+        )
+        for key, label in labels.items()
+    }
 
     page.add(
         ft.Column(
-            expand=True,
-            spacing=16,
-            controls=[
+            expand = True,
+            spacing = 16,
+            controls = [
                 ft.Row(
-                    controls=[
-                        profile_button,
-                        customer_button,
-                    ],
+                    wrap = True,
+                    controls = list(navigation_buttons.values()), 
                 ),
                 ft.Divider(),
-                profile_view,
-                customer_view,
-            ],
+                *views.values(),
+            ]
         )
     )
 
