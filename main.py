@@ -7,6 +7,7 @@ from app.database import initialize_database
 from app.views.business_profile_view import build_business_profile_view
 from app.views.customer_view import build_customer_view
 from app.views.catalog_view import build_catalog_view
+from app.views.quotation_view import build_quotation_view
 
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,11 @@ def main(page: ft.Page) -> None:
                 page,
                 database_path,
             ),
+
+            "quotations": build_quotation_view(
+                page,
+                database_path
+            )
         }
         
     except (sqlite3.Error, OSError, ValueError):
@@ -65,6 +71,7 @@ def main(page: ft.Page) -> None:
         "profile": "Profil Usaha",
         "customers": "Pelanggan",
         "catalog": "Katalog",
+        "quotations": "Penawaran",
     }
 
     navigation_buttons = {
@@ -76,6 +83,9 @@ def main(page: ft.Page) -> None:
         )
         for key, label in labels.items()
     }
+
+    for key, view in views.items():
+        view.visible = key == "profile"
 
     page.add(
         ft.Column(

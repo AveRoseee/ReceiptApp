@@ -303,7 +303,7 @@ def build_catalog_view(
         )
 
     def handle_search(event) -> None:
-        nonlocal offset
+        nonlocal offset, current_search, include_archived
 
         offset = 0
         current_search = (search_input.value or "").strip()
@@ -318,7 +318,7 @@ def build_catalog_view(
         page.update()
 
     def read_form() -> dict | None:
-        for control in fields.value():
+        for control in fields.values():
             control.error = None
 
         name = (fields["name"].value or "").strip()
