@@ -11,6 +11,8 @@ from app.services import customer_service
 from app.services import invoice_service as service
 from app.services.business_profile_service import get_business_profile
 from app.views.invoice_editor import InvoiceEditor
+from app.services.business_image_service import BusinessImageValidationError
+from app.services.document_number_service import DocumentNumberError
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +74,7 @@ def build_invoice_view(
     offset = 0
     current_search = ""
     current_status = None
+    publish_pending = False
 
     search_input = ft.TextField(
         label = "Cari invoice",
@@ -194,12 +197,12 @@ def build_invoice_view(
             )
         )
 
-    def handle_detail(event) -> None:
+    def show_detail(invoice_id: int) -> None:
         try:
             with closing(connect(database_path)) as connection:
                 invoice = service.get_invoice(
                     connection,
-                    event.control.data,
+                    invoice_id,
                 )
 
                 if invoice["number"] is None:
@@ -332,9 +335,148 @@ def build_invoice_view(
             return
 
         detail_body.controls = controls
+
+        publish_button.data = invoice["id"]
+        publish_button.visible = (
+            invoice["document_status"] == "DRAFT"
+            and invoice["number"] is None
+        )
+        publish_button.disabled = publish_pending
+
         list_section.visible = False
         detail_section.visible = True
         page.update()
+
+
+    def handle_detail(event) -> None:
+        show_detail(event.control.data)
+
+
+    def handle_publish(event) -> None:
+        nonlocal publish_pending
+
+        if publish_pending:
+            return
+
+        invoice_id = event.control.data
+        publish_pending = True
+        publish_button.disabled = True
+        handled = False
+
+        def dismiss(event) -> None:
+            nonlocal handled, publish_pending
+
+            if handled:
+                return
+
+            handled = True
+            publish_pending = False
+            publish_button.disabled = False
+            page.update()
+
+        def cancel(event) -> None:
+            if handled:
+                return
+
+            page.pop_dialog()
+            dismiss(event)
+
+        def confirm(event) -> None:
+            nonlocal handled, publish_pending
+            nonlocal offset, current_search, current_status
+
+            if handled:
+                return
+
+            handled = True
+            confirm_button.disabled = True
+            cancel_button.disabled = True
+            page.pop_dialog()
+
+            result = None
+
+            try:
+                result = service.publish_invoice(
+                    database_path,
+                    invoice_id,
+                )
+
+            except (
+                service.InvoiceValidationError,
+                service.InvoiceNotFoundError,
+                service.InvoiceStateError,
+                BusinessImageValidationError,
+                DocumentNumberError,
+            ) as error:
+                notify(str(error))
+            except (sqlite3.Error, OSError, RuntimeError):
+                logger.exception("Gagal menerbitkan Invoice.")
+                notify(
+                    "Invoice belum dapat diterbitkan. "
+                    "Silakan coba kembali."
+                )
+
+            finally:
+                publish_pending = False
+                publish_button.disabled = False
+
+            if result is None:
+                page.update()
+                return
+
+            offset = 0
+            current_search = ""
+            current_status = "ISSUED"
+
+            search_input.value = ""
+            status_filter.value = "ISSUED"
+            publish_button.visible = False
+
+            refresh_list()
+            show_detail(invoice_id)
+
+            page.show_dialog(
+                ft.SnackBar(
+                    content = ft.Text(
+                        f"Invoice {result['number']} berhasil diterbitkan"
+                    ),
+                    bgcolor = ft.Colors.GREEN_700,
+                )
+            )
+
+        cancel_button = ft.TextButton(
+            content = "Batal",
+            on_click = cancel,
+        )
+        confirm_button = ft.TextButton(
+            content = "Terbitkan",
+            on_click = confirm
+        )
+
+        dialog = ft.AlertDialog(
+            modal = True,
+            title = ft.Text("Terbitkan Invoice?"),
+            content = ft.Text(
+                f"Draft #{invoice_id} akan mendapatkan nomor invoice. "
+                "Isi invoice tidak dapat diedit setelah diterbitkan. "
+                "Pastikan pelanggan, item, dan tanggal sudah benar."
+            ),
+            actions = [
+                cancel_button,
+                confirm_button,
+            ],
+            on_dismiss = dismiss
+        )
+
+        page.update()
+        page.show_dialog(dialog)
+
+    publish_button = ft.Button(
+        content = "Terbitkan Invoice",
+        visible = False,
+        on_click = handle_publish,
+    )
+
 
     def invoice_card(invoice: dict) -> ft.Container:
         title = (
@@ -372,7 +514,7 @@ def build_invoice_view(
                     ft.TextButton(
                         content="Lihat Detail",
                         data=invoice["id"],
-                        on_click=handle_detail,
+                        on_click = handle_detail,
                     ),
                     ft.TextButton(
                         content="Edit Draft",
@@ -592,6 +734,7 @@ def build_invoice_view(
                 on_click = handle_back,
             ),
             detail_body,
+            publish_button,
         ],
     )
 

@@ -8,6 +8,7 @@ from app.views.business_profile_view import build_business_profile_view
 from app.views.customer_view import build_customer_view
 from app.views.catalog_view import build_catalog_view
 from app.views.quotation_view import build_quotation_view
+from app.views.invoice_view import build_invoice_view
 
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,11 @@ def main(page: ft.Page) -> None:
                 database_path,
             ),
 
+            "invoices": build_invoice_view(
+                page,
+                database_path,
+            ),
+
             "quotations": build_quotation_view(
                 page,
                 database_path
@@ -65,12 +71,17 @@ def main(page: ft.Page) -> None:
             view.visible = key == selected
             navigation_buttons[key].disabled = key == selected
 
+        refresh = views[selected].data
+        if callable(refresh):
+            refresh()
+
         page.update()
 
     labels = {
         "profile": "Profil Usaha",
         "customers": "Pelanggan",
         "catalog": "Katalog",
+        "invoices": "Invoice",
         "quotations": "Penawaran",
     }
 

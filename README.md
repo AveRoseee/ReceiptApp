@@ -2,7 +2,7 @@
 
 DokumenUsaha adalah aplikasi desktop Windows untuk administrasi usaha kecil di Indonesia. Aplikasi dikembangkan dengan Python, Flet, dan SQLite untuk penggunaan offline, satu pengguna, dan satu usaha per database.
 
-Tujuan akhirnya adalah menghubungkan pelanggan, penawaran, invoice, pembayaran DP/cicilan, dan kwitansi. **Saat ini halaman yang tersedia adalah Profil Usaha dan Pelanggan.** Pengelolaan katalog sudah tersedia melalui service dan repository, tetapi belum memiliki halaman aplikasi.
+Prioritas beta adalah invoice dengan item biasa untuk barang, jasa titip, dan pengiriman. **Halaman tersedia: Profil Usaha, Pelanggan, Katalog, Invoice, dan Penawaran.** Invoice dapat dibuat langsung sebagai draft tanpa penawaran. Penerbitan invoice, pembayaran, kwitansi, PDF, dan ekspor/impor seluruh data belum tersedia melalui aplikasi.
 
 Repository: [InsoniacX/ReceiptApp](https://github.com/InsoniacX/ReceiptApp).
 
@@ -21,7 +21,7 @@ Repository: [InsoniacX/ReceiptApp](https://github.com/InsoniacX/ReceiptApp).
 
 ## Status implementasi
 
-Status berikut berdasarkan kode yang tersedia pada 18 September 2026. Keberadaan tabel database tidak berarti fitur tersebut sudah dapat digunakan melalui aplikasi.
+Status berikut mencakup tahap draft invoice langsung. Keberadaan tabel database tidak berarti fiturnya sudah dapat digunakan melalui aplikasi.
 
 | Bagian | Status | Kemampuan yang tersedia |
 | --- | --- | --- |
@@ -29,10 +29,11 @@ Status berikut berdasarkan kode yang tersedia pada 18 September 2026. Keberadaan
 | Profil usaha | Service, repository, dan UI tersedia | Membaca dan menyimpan identitas usaha, kontak, rekening, dan penanggung jawab. |
 | Gambar usaha | Service dan UI tersedia | Memilih, menyimpan, dan memuat ulang logo, gambar QRIS, tanda tangan, dan stempel. |
 | Pelanggan | Service, repository, dan UI tersedia | Tambah, edit, pencarian, arsip, aktivasi kembali, dan daftar 20 pelanggan per halaman. |
-| Katalog produk/jasa | Service, repository, dan tes tersedia | Tambah, baca, pembaruan sebagian, pencarian, arsip, serta validasi harga dan SKU. UI belum tersedia. |
-| Penawaran dan invoice | Schema dan pengujian aturan database tersedia | Tabel dokumen, item, snapshot, status, dan penguncian data; service serta UI belum tersedia. |
+| Katalog produk/jasa | Service, repository, UI, dan tes tersedia | Tambah/edit, pencarian, arsip, aktivasi kembali, paginasi, serta validasi harga dan SKU. |
+| Penawaran | Draft, daftar, dan detail tersedia melalui UI | Service penerbitan/snapshot dan perubahan status tersedia; tombol penerbitan/status belum terhubung ke UI. |
+| Invoice langsung | Draft, daftar, dan detail tersedia melalui UI | Pelanggan, item katalog/manual, tanggal jatuh tempo, diskon, pajak, dan total. Penerbitan invoice belum tersedia. |
 | Pembayaran dan kwitansi | Schema dan pengujian aturan database tersedia | Aturan pembayaran, pembatalan, kwitansi unik, serta saldo turunan; service serta UI belum tersedia. |
-| Nomor dan riwayat dokumen | Fondasi database tersedia | Counter terpisah dan tabel riwayat; alur penerbitan melalui service belum tersedia. |
+| Nomor, kalkulasi, dan riwayat dokumen | Service dan tes tersedia | Pembulatan integer Rupiah, counter terpisah, dan riwayat draft. Draft invoice belum memiliki nomor resmi. |
 | PDF, cetak, dashboard, backup/restore | Belum tersedia | Masuk rencana pengembangan. |
 
 Aplikasi belum menyediakan login, sinkronisasi cloud, payment gateway, kasir/POS, persediaan barang, atau akuntansi.
@@ -75,7 +76,7 @@ Jika repository dan `venv` sudah tersedia, gunakan lingkungan tersebut tanpa mem
 .\venv\Scripts\python.exe main.py
 ```
 
-Pemanggilan interpreter secara langsung tidak membutuhkan aktivasi virtual environment. `main.py` menginisialisasi database, menerapkan migrasi yang belum dijalankan, lalu membangun halaman Profil Usaha dan Pelanggan. Log dan detail kesalahan ditampilkan di terminal.
+Pemanggilan interpreter secara langsung tidak membutuhkan aktivasi virtual environment. `main.py` menginisialisasi database, menerapkan migrasi yang belum dijalankan, lalu membangun halaman Profil Usaha, Pelanggan, Katalog, Invoice, dan Penawaran. Log dan detail kesalahan ditampilkan di terminal.
 
 ### Inisialisasi database secara terpisah
 
@@ -117,7 +118,24 @@ Halaman **Pelanggan** menyediakan pelanggan perorangan (`PERSONAL`) atau perusah
 
 ### Katalog
 
-Katalog belum muncul pada navigasi aplikasi. Fungsinya saat ini digunakan melalui `catalog_service` dan diuji melalui pytest. Data katalog meliputi SKU opsional, jenis `PRODUCT`/`SERVICE`, nama, deskripsi, harga default dalam Rupiah, satuan, dan status aktif.
+Halaman **Katalog** menyediakan tambah/edit item, pencarian, paginasi, arsip, dan aktivasi kembali. Harga default diisi dalam integer Rupiah.
+
+### Invoice langsung
+
+1. Tambahkan pelanggan aktif, lalu buka **Invoice → Tambah Invoice**.
+2. Pilih pelanggan, tanggal invoice, dan jatuh tempo opsional.
+3. Gunakan **Tambah dari Katalog** atau **Tambah Item Manual**. Setiap barang, jasa titip, dan pengiriman menjadi baris terpisah.
+4. Harga ditulis tanpa pemisah ribuan, misalnya 150000. Kuantitas memakai koma dengan maksimal tiga angka desimal, misalnya 1,5.
+5. Diskon dapat berupa nominal atau persentase; pajak opsional. Persentase maksimal dua angka desimal. Total dihitung otomatis.
+6. Klik **Simpan Draft**, lalu gunakan **Lihat Detail** atau **Edit Draft**.
+
+Draft belum bernomor resmi dan boleh belum memiliki item. Nama, deskripsi, satuan, dan harga item yang disimpan tetap dipertahankan ketika katalog berubah. Pelanggan atau item katalog yang diarsipkan harus diganti atau diaktifkan kembali sebelum draft disimpan. **Batal** mengabaikan perubahan form.
+
+Contoh: Action Figure Rp150.000, Sepatu Gunung Rp450.000, Jasa Titip Rp100.000, dan Pengiriman Rp25.000 menghasilkan total Rp725.000. Tidak ada pengelompokan item atau konversi kurs otomatis.
+
+### Penawaran
+
+Halaman **Penawaran** menyediakan tambah/edit draft, daftar, pencarian, filter status, dan detail. Form item memakai komponen bersama dengan Invoice. Invoice langsung tidak memerlukan penawaran.
 
 ## Struktur kode
 
@@ -139,24 +157,43 @@ DokumenUsaha/
 │   ├── repositories/
 │   │   ├── business_profile_repository.py
 │   │   ├── customer_repository.py
-│   │   └── catalog_repository.py
+│   │   ├── catalog_repository.py
+│   │   ├── quotation_repository.py
+│   │   ├── invoice_repository.py
+│   │   └── document_number_repository.py
 │   ├── services/
 │   │   ├── business_profile_service.py
 │   │   ├── business_image_service.py
 │   │   ├── business_logo_service.py
 │   │   ├── customer_service.py
-│   │   └── catalog_service.py
+│   │   ├── catalog_service.py
+│   │   ├── quotation_service.py
+│   │   ├── invoice_service.py
+│   │   ├── document_calculator.py
+│   │   ├── document_number_service.py
+│   │   └── document_asset_service.py
 │   ├── components/
 │   │   ├── business_logo.py         # Pemilih dan pratinjau logo
 │   │   └── business_image.py        # Pemilih QRIS/tanda tangan/stempel
 │   └── views/
 │       ├── business_profile_view.py
-│       └── customer_view.py
+│       ├── customer_view.py
+│       ├── catalog_view.py
+│       ├── quotation_view.py
+│       ├── quotation_editor.py
+│       ├── invoice_view.py
+│       ├── invoice_editor.py
+│       └── document_editor.py       # Form item bersama
 └── tests/
     ├── test_database.py
     ├── test_business_profile.py
     ├── test_customer_service.py
-    └── test_catalog_service.py
+    ├── test_catalog_service.py
+    ├── test_document_*.py
+    ├── test_quotation_*.py
+    ├── test_invoice_service.py
+    ├── test_invoice_views.py
+    └── test_view_interactions.py
 ```
 
 File `__init__.py` lain menandai paket Python. Folder `venv`, cache, database lokal, dan konfigurasi `.vscode` diabaikan oleh Git.
@@ -181,6 +218,7 @@ Views menangani input, navigasi, dan pesan pengguna. Services memvalidasi data d
 | `business_profile_service` | `get_business_profile`, `save_business_profile` | Satu profil; nama wajib; pembaruan sebagian mempertahankan field lain. Pembacaan mengembalikan `None` jika profil belum ada. |
 | `customer_service` | `get_customer`, `list_customers`, `create_customer`, `update_customer`, `set_customer_active` | Validasi tipe pelanggan, ID, nama, pencarian, dan paginasi; arsip melalui status aktif. |
 | `catalog_service` | `get_item`, `list_items`, `create_item`, `update_item`, `set_item_active` | Validasi produk/jasa, nama, satuan, harga integer, SKU unik, dan paginasi. |
+| `invoice_service` | `create_draft`, `get_invoice`, `update_draft`, `list_invoices` | Invoice langsung. Header, item, dan event disimpan atomik; hanya draft tanpa nomor yang dapat diedit. Pembaruan sebagian mempertahankan data dan harga sebelumnya. |
 | `business_image_service` | `save_business_image`, `load_business_image` | Menerima lokasi database dan jenis gambar; hasil berupa bytes gambar, atau `None` saat belum ada gambar. |
 | `business_logo_service` | `save_business_logo`, `load_business_logo` | Meneruskan operasi logo ke service gambar bersama. |
 
@@ -242,7 +280,7 @@ Terdapat 12 tabel bisnis, satu tabel teknis migrasi, dan satu view saldo.
 
 Schema menggunakan tabel `STRICT`, foreign key, dan trigger untuk menjaga aturan dokumen. Nominal menggunakan integer Rupiah; kuantitas dokumen memakai `quantity_milli` berskala 1.000, dan persentase memakai basis point (100 = 1%). Saldo invoice dihitung dari pembayaran valid, bukan disimpan ulang sebagai angka yang diedit manual.
 
-Constraint dan trigger sudah mencakup pembatasan pembayaran berlebih, penguncian dokumen terbit, nomor unik, serta pembatalan pembayaran/kwitansi. Kalkulasi dokumen, validasi kalender, pembuatan snapshot, dan penerbitan dokumen masih memerlukan service tersendiri. Lihat `app/database/migrations/001_initial_schema.sql` untuk definisi fisiknya.
+Constraint dan trigger sudah mencakup pembatasan pembayaran berlebih, penguncian dokumen terbit, nomor unik, serta pembatalan pembayaran/kwitansi. Kalkulasi, penomoran, dan snapshot/penerbitan penawaran sudah tersedia melalui service. Penerbitan invoice dan pencatatan pembayaran/kwitansi belum dihubungkan ke aplikasi. Lihat `app/database/migrations/001_initial_schema.sql` untuk definisi fisiknya.
 
 ### Migrasi dan transaksi
 
@@ -274,8 +312,12 @@ Untuk fokus pada salah satu modul:
 | `test_business_profile.py` | Validasi profil, normalisasi input, pembaruan sebagian, dan mempertahankan data saat input salah. |
 | `test_customer_service.py` | Pembuatan pelanggan, validasi, pembaruan, pencarian, arsip, dan data tidak ditemukan. |
 | `test_catalog_service.py` | Produk/jasa, harga, SKU, pencarian, pembaruan sebagian, rollback, arsip, dan batas paginasi. |
+| `test_document_calculator.py`, `test_document_number.py` | Perhitungan, pembulatan, penomoran, dan rollback. |
+| `test_quotation_edit.py`, `test_quotation_publish.py`, `test_quotation_status.py` | Draft, penerbitan/snapshot, status, dan daftar penawaran. |
+| `test_invoice_service.py` | Draft langsung, item jastip, validasi, rollback, harga historis, penguncian, dan daftar invoice. |
+| `test_view_interactions.py`, `test_invoice_views.py` | Form, navigasi, total, paginasi, arsip, dan penanganan kesalahan melalui handler Flet. |
 
-Tes menggunakan database sementara melalui fixture pytest. Pengujian database dokumen tidak berarti halaman penawaran, invoice, pembayaran, atau kwitansi sudah tersedia. Belum ada file tes otomatis khusus service gambar atau interaksi UI.
+Tes menggunakan database sementara melalui fixture pytest. Tes interaksi memanggil handler Flet tanpa membuka jendela desktop; pengujian visual tetap diperlukan pada perangkat nyata. Penerbitan invoice, pembayaran, dan kwitansi masih sebatas fondasi database.
 
 Pemeriksaan manual UI yang relevan: simpan profil, unggah setiap jenis gambar, tutup dan buka aplikasi untuk memeriksa pemuatan ulang, lalu coba tambah/edit/cari/arsip/aktifkan kembali pelanggan. Jumlah tes yang lulus sebaiknya dibaca dari hasil eksekusi terbaru; README ini tidak menetapkan angka kelulusan permanen.
 
@@ -319,20 +361,21 @@ Folder `.vscode/` diabaikan oleh Git; konfigurasi tersebut bersifat lokal dan me
 | Debugger berhenti pada exception yang memang diuji | Opsi `Raised Exceptions` dapat menghentikan eksekusi sebelum `pytest.raises` menangkap exception; nonaktifkan opsi itu bila tidak diperlukan. |
 | Gambar belum bisa disimpan | Simpan profil dahulu, lalu periksa format, ukuran, resolusi, dan keterbacaan file. |
 | Gambar tersimpan tidak ditemukan | Periksa direktori data beserta `assets`; pilih ulang gambar jika salinannya hilang. |
-| Halaman katalog tidak muncul | UI katalog belum dibuat; yang tersedia baru repository, service, dan tes. |
+| Invoice belum bernomor atau belum memiliki tombol PDF | Tahap saat ini menyediakan draft invoice; penerbitan dan PDF merupakan tahap berikutnya. |
 | `Applied migration has changed` | Cocokkan kembali file migrasi dengan versi yang diterapkan; perubahan schema baru harus masuk migrasi berikutnya. |
 | `database is locked` | Pastikan tidak ada proses lain menahan transaksi tulis pada database yang sama, lalu coba kembali. |
 
 ## Pengembangan berikutnya
 
-Urutan pekerjaan yang direncanakan:
+Urutan prioritas beta:
 
-1. Membuat halaman katalog dan menghubungkannya ke navigasi aplikasi.
-2. Membuat kalkulator dokumen dan service penomoran.
-3. Membuat penawaran, baris item, snapshot, dan alur status.
-4. Membuat invoice langsung serta konversi dari penawaran.
-5. Membuat pencatatan DP/cicilan, pembatalan pembayaran, dan kwitansi.
-6. Membuat PDF, preview/cetak, dan terbilang Rupiah.
-7. Menambahkan dashboard, backup/restore database beserta aset, serta distribusi Windows.
+1. Penerbitan invoice langsung dengan nomor dan snapshot historis.
+2. Pencatatan DP/cicilan, saldo, pembatalan pembayaran, dan kwitansi.
+3. PDF invoice/kwitansi yang dapat disimpan offline.
+4. Ekspor/impor satu paket data beserta gambar untuk memperbarui perangkat lain, dengan cadangan sebelum mengganti data penerima. Penggabungan perubahan dua arah tidak termasuk tahap ini.
+5. Percobaan paket Windows/Android sejak awal dan pengujian alur lengkap pada perangkat nyata. Distribusi iPhone membutuhkan kesiapan build serta penandatanganan Apple.
+6. Pilot terbatas, perbaikan, kemudian perluasan bertahap menuju 10 perusahaan.
+
+Aplikasi tetap memakai SQLite lokal tanpa server. Pengguna menentukan harga dan biaya sendiri. Pengelompokan item, konversi kurs otomatis, dan dashboard ditunda.
 
 Impor/ekspor Excel merupakan pengembangan tambahan. Delivery Order, Purchase Order, RAB, multi-user, cloud, dan integrasi pembayaran bukan kemampuan yang tersedia pada tahap ini.
