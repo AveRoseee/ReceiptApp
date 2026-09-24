@@ -99,10 +99,18 @@ def build_catalog_view(
     def open_editor(item: dict | None = None) -> None:
         nonlocal editing_id
 
-        editing_id = item["id"] if item else None
+        editing_id = item["id"] if item is not None else None
 
         form_title.value = (
-            "Edit Produk" if item is not None else "Tambah Item"
+            "Edit Produk/Jasa"
+            if item is not None
+            else "Tambah Item"
+        )
+
+        item_type.value = (
+            item["type"]
+            if item is not None
+            else "PRODUCT"
         )
 
         defaults = {
@@ -110,16 +118,17 @@ def build_catalog_view(
             "sku": "",
             "unit": "pcs",
             "default_price": "0",
-            "description": ""
+            "description": "",
         }
 
         for name, control in fields.items():
             value = (
-                item.get(name) or ""
+                item.get(name)
                 if item is not None
                 else defaults[name]
             )
-            control.value = "" if value is not None else str(value)
+
+            control.value = "" if value is None else str(value)
             control.error = None
 
         editor.visible = True
@@ -151,8 +160,13 @@ def build_catalog_view(
 
         except (sqlite3.Error, OSError):
             logger.exception("Gagal membaca item katalog")
-            notify("Item gagal dimuat, Coba lagi dalam beberapa saat.", is_error = True)
+            notify(
+                "Item gagal dimuat. Silakan coba kembali.",
+                is_error=True,
+            )
             return
+
+        open_editor(item)
 
     def handle_status(event) -> None:
         item_id, active = event.control.data
@@ -294,7 +308,7 @@ def build_catalog_view(
                 )
             ]
 
-        previous_button.disabled = True
+        previous_button.disabled = offset == 0
         next_button.disabled = len(items) <= PAGE_SIZE
 
         page_info.value = (
@@ -313,6 +327,8 @@ def build_catalog_view(
         page.update()
 
     def handle_page(event) -> None:
+        nonlocal offset
+
         offset = max(0, offset + event.control.data)
         refresh_list()
         page.update()

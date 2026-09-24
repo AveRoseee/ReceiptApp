@@ -8,9 +8,9 @@ import flet as ft
 
 from app.database import connect
 from app.services import customer_service
-from app.services import quotation_service as service
+from app.services import invoice_service as service
 from app.services.business_profile_service import get_business_profile
-from app.views.quotation_editor import QuotationEditor
+from app.views.invoice_editor import InvoiceEditor
 
 
 logger = logging.getLogger(__name__)
@@ -19,11 +19,8 @@ PAGE_SIZE = 20
 
 STATUS_LABELS = {
     "DRAFT": "Draft",
-    "SENT": "Diterbitkan",
-    "ACCEPTED": "Diterima",
-    "REJECTED": "Ditolak",
-    "EXPIRED": "Kadaluwarsa",
-    "CONVERTED": "Dikoneversi ke invoice",
+    "ISSUED": "Diterbitkan",
+    "CANCELLED": "Dibatalkan",
 }
 
 
@@ -68,7 +65,7 @@ def read_snapshot(raw: str, label: str) -> dict:
     return snapshot["data"]
 
 
-def build_quotation_view(
+def build_invoice_view(
     page: ft.Page,
     database_path: Path
 ) -> ft.Column:
@@ -77,7 +74,7 @@ def build_quotation_view(
     current_status = None
 
     search_input = ft.TextField(
-        label = "Cari penawaran",
+        label = "Cari invoice",
         hint_text = "Nomor atau nama pelanggan",
         col = {"xs": 12, "md": 6}
     )
@@ -98,7 +95,7 @@ def build_quotation_view(
         ],
     )
 
-    quotation_list = ft.Column(spacing = 12)
+    invoice_list = ft.Column(spacing = 12)
     page_info = ft.Text()
     detail_body = ft.Column(spacing = 16)
 
@@ -200,47 +197,47 @@ def build_quotation_view(
     def handle_detail(event) -> None:
         try:
             with closing(connect(database_path)) as connection:
-                quotation = service.get_quotation(
+                invoice = service.get_invoice(
                     connection,
                     event.control.data,
                 )
 
-                if quotation["status"] == "DRAFT":
+                if invoice["number"] is None:
                     business = get_business_profile(connection) or {}
                     customer = customer_service.get_customer(
                         connection,
-                        quotation["customer_id"],
+                        invoice["customer_id"],
                     )
                 else:
                     business = read_snapshot(
-                        quotation["business_snapshot"],
+                        invoice["business_snapshot"],
                         "usaha",
                     )
                     customer = read_snapshot(
-                        quotation["customer_snapshot"],
+                        invoice["customer_snapshot"],
                         "pelanggan",
                     )
 
             title = (
-                quotation["number"]
-                or f"Draft #{quotation['id']}"
+                invoice["number"]
+                or f"Draft #{invoice['id']}"
             )
             status_label = STATUS_LABELS.get(
-                quotation["status"],
-                quotation["status"],
+                invoice["document_status"],
+                invoice["document_status"],
             )
 
             discount_label = "Diskon"
 
-            if quotation["discount_type"] == "PERCENT":
+            if invoice["discount_type"] == "PERCENT":
                 rate = format_scaled(
-                    quotation["discount_value"],
+                    invoice["discount_value"],
                     2,
                 )
                 discount_label += f" ({rate}%)"
 
             tax_rate = format_scaled(
-                quotation["tax_rate_bps"],
+                invoice["tax_rate_bps"],
                 2,
             )
 
@@ -254,11 +251,11 @@ def build_quotation_view(
                     f"Status: {status_label}"
                 ),
                 ft.Text(
-                    f"Tanggal: {quotation['issue_date']}"
+                    f"Tanggal: {invoice['issue_date']}"
                 ),
                 ft.Text(
-                    f"Berlaku sampai: "
-                    f"{quotation['valid_until'] or 'Tidak ditemukan'}"
+                    f"Jatuh tempo: "
+                    f"{invoice['due_date'] or 'Tidak ditentukan'}"
                 ),
                 ft.Divider(),
                 party_section(
@@ -269,17 +266,17 @@ def build_quotation_view(
                 party_section("Pelanggan", customer),
                 ft.Divider(),
                 ft.Text(
-                    "Item Penawaran",
+                    "Item Invoice",
                     size = 18,
                     weight = ft.FontWeight.BOLD,
                 ),
                 *[
                     item_section(item)
-                    for item in quotation["items"]
+                    for item in invoice["items"]
                 ],
             ]
 
-            if not quotation["items"]:
+            if not invoice["items"]:
                 controls.append(
                     ft.Text("Draft ini belum memiliki item.")
                 )
@@ -289,37 +286,37 @@ def build_quotation_view(
                     ft.Divider(),
                     ft.Text(
                         f"Subtotal: "
-                        f"{format_rupiah(quotation['subtotal'])}"
+                        f"{format_rupiah(invoice['subtotal'])}"
                     ),
                     ft.Text(
                         f"{discount_label}: "
-                        f"{format_rupiah(quotation['discount_amount'])}"
+                        f"{format_rupiah(invoice['discount_amount'])}"
                     ),
                     ft.Text(
                         f"Pajak ({tax_rate}%): "
-                        f"{format_rupiah(quotation['tax_amount'])}"
+                        f"{format_rupiah(invoice['tax_amount'])}"
                     ),
                     ft.Text(
                         f"Total: "
-                        f"{format_rupiah(quotation['grand_total'])}",
+                        f"{format_rupiah(invoice['grand_total'])}",
                         weight=ft.FontWeight.BOLD,
                     ),
                     ft.Text(
                         "Catatan",
                         weight = ft.FontWeight.BOLD,
                     ),
-                    ft.Text(quotation["notes"] or "-"),
+                    ft.Text(invoice["notes"] or "-"),
                     ft.Text(
                         "Syarat dan Ketentuan",
                         weight = ft.FontWeight.BOLD,
                     ),
-                    ft.Text(quotation["terms"] or "-")
+                    ft.Text(invoice["terms"] or "-")
                 ]
             )
 
         except (
-            service.QuotationValidationError,
-            service.QuotationNotFoundError,
+            service.InvoiceValidationError,
+            service.InvoiceNotFoundError,
             customer_service.CustomerValidationError,
             customer_service.CustomerNotFoundError,
             SnapshotReadError,
@@ -329,9 +326,9 @@ def build_quotation_view(
 
         except (sqlite3.Error, OSError):
             logger.exception(
-                "Gagal membaca detail penawaran"
+                "Gagal membaca detail invoice"
             )
-            notify("Detail penawaran belum dapat dimuat.")
+            notify("Detail invoice belum dapat dimuat.")
             return
 
         detail_body.controls = controls
@@ -339,14 +336,14 @@ def build_quotation_view(
         detail_section.visible = True
         page.update()
 
-    def quotation_card(quotation: dict) -> ft.Container:
+    def invoice_card(invoice: dict) -> ft.Container:
         title = (
-            quotation["number"]
-            or f"Draft #{quotation['id']}"
+            invoice["number"]
+            or f"Draft #{invoice['id']}"
         )
         status_label = STATUS_LABELS.get(
-            quotation["status"],
-            quotation["status"],
+            invoice["document_status"],
+            invoice["document_status"],
         )
 
         return ft.Container(
@@ -362,27 +359,27 @@ def build_quotation_view(
                         weight = ft.FontWeight.BOLD,
                     ),
                     ft.Text(
-                        quotation["customer_name"]
+                        invoice["customer_name"]
                         or "Nama tidak tersedia"
                     ),
                     ft.Text(
-                        f"{quotation['issue_date']} · "
+                        f"{invoice['issue_date']} · "
                         f"{status_label}"
                     ),
                     ft.Text(
-                        format_rupiah(quotation["grand_total"])
+                        format_rupiah(invoice["grand_total"])
                     ),
                     ft.TextButton(
                         content="Lihat Detail",
-                        data=quotation["id"],
+                        data=invoice["id"],
                         on_click=handle_detail,
                     ),
                     ft.TextButton(
                         content="Edit Draft",
-                        data=quotation["id"],
+                        data=invoice["id"],
                         visible=(
-                            quotation["status"] == "DRAFT"
-                            and quotation["number"] is None
+                            invoice["document_status"] == "DRAFT"
+                            and invoice["number"] is None
                         ),
                         on_click=handle_open_editor,
                     ),
@@ -395,7 +392,7 @@ def build_quotation_view(
 
         try:
             with closing(connect(database_path)) as connection:
-                quotations = service.list_quotations(
+                invoices = service.list_invoices(
                     connection,
                     search = current_search,
                     status = current_status,
@@ -403,18 +400,28 @@ def build_quotation_view(
                     offset = offset,
                 )
 
+                if not invoices and offset > 0:
+                    offset = 0
+                    invoices = service.list_invoices(
+                        connection,
+                        search=current_search,
+                        status=current_status,
+                        limit=PAGE_SIZE + 1,
+                        offset=0,
+                    )
+
         except (
-            service.QuotationValidationError,
+            service.InvoiceValidationError,
             sqlite3.Error,
             OSError,
         ): 
             logger.exception(
-                "Gagal memuat daftar penawaran"
+                "Gagal memuat daftar invoice"
             )
 
-            quotation_list.controls = [
+            invoice_list.controls = [
                 ft.Text(
-                    "Daftar penawaran belum dapat dimuat. "
+                    "Daftar invoice belum dapat dimuat. "
                     "Klik Cari untuk mencoba kembali.",
                     color = ft.Colors.RED_700,
                 )
@@ -424,27 +431,27 @@ def build_quotation_view(
             page_info.value = ""
             return
         
-        visible = quotations[:PAGE_SIZE]
+        visible = invoices[:PAGE_SIZE]
 
-        quotation_list.controls = [
-            quotation_card(row)
+        invoice_list.controls = [
+            invoice_card(row)
             for row in visible
         ]
 
         if not visible:
-            quotation_list.controls = [
+            invoice_list.controls = [
                 ft.Text(
-                    "Belum ada penawaran yang sesuai "
+                    "Belum ada invoice yang sesuai "
                     "dengan pencarian dan filter."
                 )
             ]
 
         previous_button.disabled = offset == 0
-        next_button.disabled = len(quotations) <= PAGE_SIZE
+        next_button.disabled = len(invoices) <= PAGE_SIZE
 
         page_info.value = (
             f"Halaman {offset // PAGE_SIZE + 1}"
-            f" · {len(visible)} penawaran ditampilkan"
+            f" · {len(visible)} invoice ditampilkan"
         )
 
     def handle_search(event) -> None:
@@ -487,7 +494,7 @@ def build_quotation_view(
         refresh_list()
         page.update()
 
-    def handle_saved(quotation):
+    def handle_saved(invoice):
         nonlocal offset, current_search, current_status
 
         offset = 0
@@ -501,12 +508,12 @@ def build_quotation_view(
         page.show_dialog(
             ft.SnackBar(
                 content=ft.Text(
-                    f"Draft #{quotation['id']} berhasil disimpan."
+                    f"Draft #{invoice['id']} berhasil disimpan."
                 ),
             )
         )
 
-    editor = QuotationEditor(
+    editor = InvoiceEditor(
         page,
         database_path,
         on_saved=handle_saved,
@@ -522,8 +529,8 @@ def build_quotation_view(
             return
 
         except (sqlite3.Error, OSError):
-            logger.exception("Gagal membuka form penawaran")
-            notify("Form penawaran belum dapat dimuat.")
+            logger.exception("Gagal membuka form invoice")
+            notify("Form invoice belum dapat dimuat.")
             return
 
         list_section.visible = False
@@ -551,7 +558,7 @@ def build_quotation_view(
         spacing = 16,
         controls = [
             ft.Button(
-                content="Tambah Penawaran",
+                content="Tambah Invoice",
                 data=None,
                 on_click=handle_open_editor,
             ),
@@ -565,7 +572,7 @@ def build_quotation_view(
                 content = "Cari",
                 on_click = handle_search,
             ),
-            quotation_list,
+            invoice_list,
             page_info,
             ft.Row(
                 controls = [
@@ -596,9 +603,14 @@ def build_quotation_view(
         spacing=20,
         controls=[
             ft.Text(
-                "Penawaran",
+                "Invoice",
                 size=28,
                 weight=ft.FontWeight.BOLD,
+            ),
+            ft.Text(
+                "Buat invoice langsung tanpa penawaran. Tambahkan barang, "
+                "jasa titip, dan pengiriman sebagai item terpisah. "
+                "Invoice disimpan sebagai draft dan belum memiliki nomor resmi."
             ),
             list_section,
             detail_section,
