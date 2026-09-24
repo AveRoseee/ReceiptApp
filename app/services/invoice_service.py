@@ -245,7 +245,6 @@ def publish_invoice(database_path: str | Path, invoice_id: int) -> dict:
                     key: current[key]
                     for key in HEADER_INPUTS
                 }
-
                 data["items"] = [
                     {
                         key: item[key]
@@ -287,7 +286,6 @@ def publish_invoice(database_path: str | Path, invoice_id: int) -> dict:
                     ensure_ascii = False,
                     sort_keys = True,
                 )
-
                 customer_snapshot = json.dumps(
                     {
                         "schema_version": 1,
@@ -302,7 +300,6 @@ def publish_invoice(database_path: str | Path, invoice_id: int) -> dict:
                     invoice_id,
                     header,
                 )
-
                 repository.replace_items(
                     connection,
                     invoice_id,
@@ -322,15 +319,13 @@ def publish_invoice(database_path: str | Path, invoice_id: int) -> dict:
                     business_snapshot,
                     customer_snapshot,
                 )
-
                 repository.record_event(
                     connection,
                     invoice_id,
-                    "INVOICE ISSUED"
+                    "INVOICE_ISSUED"
                 )
 
                 result = get_invoice(connection, invoice_id)
 
     return result
-
 
