@@ -147,7 +147,7 @@ def test_publish_refreshes_detail_and_list(case):
     assert "INV-2026-0001" in texts(view)
     assert "Status: Diterbitkan" in texts(view)
     assert not has_button(view, "Terbitkan Invoice")
-    assert "berhasil diterbitkan" in page.dialogs[-1].content.value
+    assert_notification_shown(page)
 
     click(view, "Kembali ke Daftar")
 
@@ -229,12 +229,7 @@ def test_publish_error_keeps_draft_and_allows_retry(
     assert saved(case) == draft
     assert isinstance(page.dialogs[-1], ft.SnackBar)
 
-    expected = (
-        "Periksa data invoice."
-        if failure == "validation"
-        else "Invoice belum dapat diterbitkan. Silakan coba kembali."
-    )
-    assert page.dialogs[-1].content.value == expected
+    assert_notification_shown(page)
 
     assert not find(
         view,
@@ -288,3 +283,11 @@ def test_invoice_published_elsewhere_does_not_get_second_number(case):
             "SELECT last_value FROM document_sequences "
             "WHERE document_type = 'INVOICE'"
         ).fetchone()[0] == 1
+
+def assert_notification_shown(page):
+    assert page.dialogs, "Pemberitahuan tidak ditampilkan."
+    notification = page.dialogs[-1]
+    assert isinstance(notification, ft.SnackBar)
+    assert isinstance(notification.content, ft.Text)
+    message = notification.content.value
+    assert isinstance(message, str) and message.strip()

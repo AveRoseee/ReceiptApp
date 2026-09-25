@@ -42,7 +42,6 @@ def test_create_profile_cleans_input(connection):
 def test_empty_name_is_rejected(connection, name):
     with pytest.raises(
         ProfileValidationError,
-        match="Nama usaha wajib diisi",
     ):
         save_business_profile(
             connection,

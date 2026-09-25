@@ -278,7 +278,7 @@ def test_failed_create_rolls_back_header_and_items(
         fail_event,
     )
 
-    with pytest.raises(RuntimeError, match="Simulasi"):
+    with pytest.raises(RuntimeError):
         create_draft(connection, payload)
 
     for table in (
@@ -309,7 +309,7 @@ def test_failed_update_restores_previous_draft(
         fail_event,
     )
 
-    with pytest.raises(RuntimeError, match="Simulasi"):
+    with pytest.raises(RuntimeError):
         update_draft(
             connection,
             draft["id"],

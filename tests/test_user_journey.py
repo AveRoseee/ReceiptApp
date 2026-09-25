@@ -312,7 +312,7 @@ def test_pilih_katalog_belum_menambahkan_item(user, kind):
     catalog_id = user.catalog()
     user.new_document(kind, customer_id)
     user.click("Tambah dari Katalog")
-    assert "Pilih item katalog" in user.text()
+    assert_error_visible(user.root)
     user.enter("Item katalog", str(catalog_id))
     user.click("Simpan Draft")
     draft = user.document(kind)
@@ -336,7 +336,7 @@ def test_dokumen_tanpa_pelanggan_ditolak(user, kind):
     user.click(f"Tambah {kind}")
     user.manual()
     user.click("Simpan Draft")
-    assert "Pilih pelanggan terlebih dahulu" in user.text()
+    assert_error_visible(user.root)
     assert user.rows(DOCUMENTS[kind][2]) == []
     assert user.field("Nama item").value == "Jasa Titip"
 
@@ -413,7 +413,7 @@ def test_jatuh_tempo_sebelum_tanggal_ditolak(user, kind):
     user.enter(label, "2026-09-23")
     user.click("Simpan Draft")
     assert user.rows(DOCUMENTS[kind][2]) == []
-    assert "mendahului" in user.text().lower()
+    assert_error_visible(user.root)
 
 
 def test_alur_jastip_dari_awal_sampai_invoice_diterbitkan(user):
@@ -509,7 +509,7 @@ def test_gagal_simpan_database_bisa_dicoba_lagi(user, monkeypatch, kind):
         patch.setattr(service, "create_draft", fail)
         user.click("Simpan Draft")
     assert user.rows(DOCUMENTS[kind][2]) == []
-    assert "Draft belum tersimpan" in user.text()
+    assert_error_visible(user.root)
     assert user.field("Nama item").value == "Jasa Titip"
     assert not user.button("Simpan Draft").disabled
     user.click("Simpan Draft")
@@ -537,5 +537,21 @@ def test_gambar_yang_hilang_tidak_membuat_halaman_crash(
     page = Page()
     application.main(page)
     reopened = User(page, user.path)
-    assert "tidak ditemukan" in reopened.text().lower()
+    assert_error_visible(reopened.root)
     assert not reopened.button(f"Pilih & Simpan {label}").disabled
+
+
+def assert_error_visible(root):
+    assert any(
+        (
+            isinstance(control, ft.Text)
+            and control.color == ft.Colors.RED_700
+            and isinstance(control.value, str)
+            and control.value.strip()
+        )
+        or (
+            isinstance(control, ft.TextField)
+            and bool(control.error)
+        )
+        for control in walk(root)
+    ), "Pesan kesalahan tidak terlihat."

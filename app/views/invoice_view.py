@@ -1,19 +1,24 @@
+# Library
 from contextlib import closing
 import json
 import logging
 from pathlib import Path
 import sqlite3
 
+# Flet
 import flet as ft
 
+# App
 from app.database import connect
+# Services
 from app.services import customer_service
 from app.services import invoice_service as service
 from app.services.business_profile_service import get_business_profile
-from app.views.invoice_editor import InvoiceEditor
 from app.services.business_image_service import BusinessImageValidationError
 from app.services.document_number_service import DocumentNumberError
-
+# Views
+from app.views.invoice_editor import InvoiceEditor
+from app.views.payment_panel import PaymentPanel
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +106,7 @@ def build_invoice_view(
     invoice_list = ft.Column(spacing = 12)
     page_info = ft.Text()
     detail_body = ft.Column(spacing = 16)
+    payment_panel = PaymentPanel(page, database_path)
 
     def notify(message: str) -> None:
         page.show_dialog(
@@ -335,6 +341,7 @@ def build_invoice_view(
             return
 
         detail_body.controls = controls
+        payment_panel.load(invoice["id"])
 
         publish_button.data = invoice["id"]
         publish_button.visible = (
@@ -735,6 +742,7 @@ def build_invoice_view(
             ),
             detail_body,
             publish_button,
+            payment_panel.control,
         ],
     )
 
@@ -761,5 +769,11 @@ def build_invoice_view(
         ],
     )
 
-    view.data = refresh_list
+    def refresh_view():
+        refresh_list()
+
+        if detail_section.visible:
+            payment_panel.refresh()
+
+    view.data = refresh_view
     return view

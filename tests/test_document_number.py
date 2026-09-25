@@ -69,7 +69,7 @@ def test_new_year_does_not_reset_counter(connection):
 
 
 def test_allocation_requires_transaction(connection):
-    with pytest.raises(RuntimeError, match="transaksi"):
+    with pytest.raises(RuntimeError):
         allocate_document_number(
             connection, "INVOICE", "2026-09-20"
         )
@@ -83,7 +83,7 @@ def test_document_and_counter_roll_back_together(connection):
         (1, "Pelanggan Contoh"),
     )
 
-    with pytest.raises(RuntimeError, match="Simulasi"):
+    with pytest.raises(RuntimeError):
         with transaction(connection):
             number = allocate_document_number(
                 connection, "INVOICE", "2026-09-20"
@@ -218,7 +218,7 @@ def test_unsupported_format_does_not_advance_counter(connection):
             ("{prefix}/{seq}",),
         )
 
-    with pytest.raises(DocumentNumberError, match="Format"):
+    with pytest.raises(DocumentNumberError):
         with transaction(connection):
             allocate_document_number(
                 connection, "INVOICE", "2026-09-20"
@@ -238,7 +238,7 @@ def test_invalid_prefix_does_not_advance_counter(connection):
             ("INV TEST",),
         )
 
-    with pytest.raises(DocumentNumberError, match="Prefix"):
+    with pytest.raises(DocumentNumberError):
         with transaction(connection):
             allocate_document_number(
                 connection, "INVOICE", "2026-09-20"

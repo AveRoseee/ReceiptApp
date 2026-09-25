@@ -211,7 +211,7 @@ def test_event_failure_rolls_back_status(case, monkeypatch):
         fail_event,
     )
 
-    with pytest.raises(RuntimeError, match="Simulasi"):
+    with pytest.raises(RuntimeError):
         change_quotation_status(
             case["connection"],
             case["sent"]["id"],

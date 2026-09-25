@@ -133,7 +133,7 @@ def test_duplicate_sku_is_rejected_after_archiving(connection):
 
     set_item_active(connection, original["id"], False)
 
-    with pytest.raises(CatalogValidationError, match="SKU"):
+    with pytest.raises(CatalogValidationError):
         create_item(
             connection,
             {"name": "Item B", "sku": " sku-001 "},

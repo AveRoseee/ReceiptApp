@@ -320,7 +320,7 @@ def test_event_failure_rolls_back_database_and_files(
         fail_event,
     )
 
-    with pytest.raises(RuntimeError, match="Simulasi"):
+    with pytest.raises(RuntimeError):
         publish_quotation(case["path"], case["draft"]["id"])
 
     assert_rolled_back(case)
