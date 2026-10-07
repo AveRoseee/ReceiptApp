@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 
 import flet as ft
+from app.components.design import SURFACE, BORDER
 
 from app.database import connect
 from app.services import customer_service
@@ -98,7 +99,7 @@ def build_quotation_view(
         ],
     )
 
-    quotation_list = ft.Column(spacing = 12)
+    quotation_list = ft.Column(spacing=12, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
     page_info = ft.Text()
     detail_body = ft.Column(spacing = 16)
 
@@ -171,7 +172,8 @@ def build_quotation_view(
     def item_section(item: dict) -> ft.Container:
         return ft.Container(
             padding = 12,
-            bgcolor = ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             border_radius = 8,
             content = ft.Column(
                 spacing = 6,
@@ -352,7 +354,8 @@ def build_quotation_view(
         return ft.Container(
             padding = 16,
             border_radius = 8,
-            bgcolor = ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             content = ft.Column(
                 spacing = 8,
                 controls = [

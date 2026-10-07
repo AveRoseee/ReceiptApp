@@ -5,6 +5,7 @@ import sqlite3
 from typing import Any
 
 import flet as ft
+from app.components.design import panel, polish
 
 from app.database import connect
 from app.services.business_profile_service import (
@@ -168,7 +169,7 @@ def build_business_profile_view(
         populate_fields(current_profile)
         status_text.value = "Profil usaha tersimpan telah dimuat."
 
-    return ft.Column(
+    view = ft.Column(
         expand=True,
         scroll=ft.ScrollMode.AUTO,
         spacing=20,
@@ -260,3 +261,17 @@ def build_business_profile_view(
             ),
         ],
     )
+    groups, current = [], []
+    for control in view.controls[2:]:
+        if isinstance(control, ft.Divider):
+            groups.append(current)
+            current = []
+        else:
+            current.append(control)
+    groups.append(current)
+    images = [panel(ft.Column(controls=group), col={"xs": 12, "md": 6})
+              for group in (groups[0], groups[4], groups[5], groups[6])]
+    view.controls = [*view.controls[:2],
+        *[panel(ft.Column(spacing=20, controls=group)) for group in groups[1:4]],
+        ft.ResponsiveRow(controls=images, spacing=20, run_spacing=20), *groups[7]]
+    return polish(view)

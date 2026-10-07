@@ -64,21 +64,38 @@ def replace_items(connection, invoice_id: int, items: list) -> None:
     )
 
 
-def record_event(connection, invoice_id: int, event_type: str) -> None:
+def record_event(connection, invoice_id: int, event_type: str, details=None) -> None:
+    import json
     connection.execute(
-        "INSERT INTO document_events (invoice_id, event_type) VALUES (?, ?)",
-        (invoice_id, event_type),
+        "INSERT INTO document_events (invoice_id, event_type, details) VALUES (?, ?, ?)",
+        (invoice_id, event_type, json.dumps(details or {}, ensure_ascii=False)),
     )
+
+
+def cancel_invoice(connection, invoice_id):
+    connection.execute(
+        "UPDATE invoices SET document_status = 'CANCELLED' WHERE id = ?",
+        (invoice_id,),
+    )
+
+
+def has_valid_payments(connection, invoice_id):
+    return connection.execute(
+        "SELECT 1 FROM payments WHERE invoice_id = ? AND status = 'VALID' LIMIT 1",
+        (invoice_id,),
+    ).fetchone() is not None
 
 
 def list_invoices(
     connection, search="", status=None, limit=100, offset=0,
+    date_from=None, date_to=None, payment_status=None,
 ) -> list[dict]:
     rows = connection.execute(
         """
         WITH summaries AS (
             SELECT i.id, i.customer_id, i.number, i.issue_date, i.due_date,
-                   i.document_status, i.grand_total,
+                   i.document_status, i.grand_total, b.balance_due,
+                   b.settlement_status, b.is_overdue,
                    CASE WHEN i.number IS NULL THEN c.name
                         ELSE coalesce(
                             json_extract(i.customer_snapshot, '$.data.name'), ''
@@ -86,9 +103,14 @@ def list_invoices(
                    END AS customer_name
             FROM invoices AS i
             JOIN customers AS c ON c.id = i.customer_id
+            JOIN invoice_balances AS b ON b.invoice_id = i.id
         )
         SELECT * FROM summaries
         WHERE (? IS NULL OR document_status = ?)
+          AND (? IS NULL OR issue_date >= ?)
+          AND (? IS NULL OR issue_date <= ?)
+          AND (? IS NULL OR (document_status = 'ISSUED' AND
+              ((? = 'OVERDUE' AND is_overdue = 1) OR settlement_status = ?)))
           AND (
               instr(lower(coalesce(number, '')), lower(?)) > 0
               OR instr(lower(customer_name), lower(?)) > 0
@@ -96,7 +118,8 @@ def list_invoices(
         ORDER BY issue_date DESC, id DESC
         LIMIT ? OFFSET ?
         """,
-        (status, status, search, search, limit, offset),
+        (status, status, date_from, date_from, date_to, date_to,
+         payment_status, payment_status, payment_status, search, search, limit, offset),
     ).fetchall()
     return [dict(row) for row in rows]
 

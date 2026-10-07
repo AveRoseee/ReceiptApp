@@ -5,6 +5,7 @@ import re
 import sqlite3
 
 import flet as ft
+from app.components.design import SURFACE, BORDER, panel
 
 from app.database import connect
 from app.services import catalog_service as service
@@ -68,7 +69,7 @@ def build_catalog_view(
         weight = ft.FontWeight.BOLD,
     )
 
-    item_list = ft.Column(spacing = 12)
+    item_list = ft.Column(spacing=12, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
     page_info = ft.Text()
 
     search_input = ft.TextField(
@@ -215,7 +216,8 @@ def build_catalog_view(
         return ft.Container(
             padding = 16,
             border_radius = 8,
-            bgcolor = ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             content = ft.Column(
                 spacing = 8,
                 controls = [
@@ -454,8 +456,7 @@ def build_catalog_view(
     search_input.on_submit = handle_search 
     archive_checkbox.on_change = handle_search
 
-    editor = ft.Column(
-        visible = False,
+    editor = panel(ft.Column(horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         spacing = 16,
         controls = [
             form_title,
@@ -478,7 +479,7 @@ def build_catalog_view(
                 ],
             ),
         ],
-    )
+    ), visible=False)
 
     list_section = ft.Column(
         spacing = 16,

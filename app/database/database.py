@@ -8,13 +8,33 @@ import sqlite3
 from typing import Iterator
 
 from app.config.paths import default_database_path
+from app.database import maintenance
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
+class ManagedConnection(sqlite3.Connection):
+    _token = None
+
+    def close(self):
+        super().close()
+        token, self._token = self._token, None
+        maintenance.unregister(token)
+
+    def __del__(self):
+        if self._token is not None:
+            self.close()
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     """Open a database. Caller owns and must close the returned connection."""
-    connection = sqlite3.connect(str(path), timeout=5, isolation_level=None)
+    token = maintenance.register(path)
+    try:
+        connection = sqlite3.connect(str(path), timeout=5, isolation_level=None, factory=ManagedConnection)
+    except BaseException:
+        maintenance.unregister(token)
+        raise
+    connection._token = token
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA busy_timeout = 5000")
@@ -93,6 +113,9 @@ def initialize_database(path: str | Path | None = None) -> Path:
     """Create an empty business database, or safely apply pending migrations."""
     destination = Path(path) if path is not None else default_database_path()
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if (destination.parent / maintenance.RESTORE_JOURNAL).exists():
+        with maintenance.exclusive(destination):
+            maintenance.recover_restore(destination)
     connection = connect(destination)
     try:
         migrate(connection)

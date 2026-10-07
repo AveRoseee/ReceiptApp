@@ -155,6 +155,10 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
         customer = _snapshot(invoice["customer_snapshot"])
         summary = get_invoice_summary(connection, invoice_id)
 
+    return render_invoice(database_path, invoice, business, customer, summary, font_path=font_path)
+
+
+def render_invoice(database_path, invoice, business, customer, summary, *, font_path=None):
     font_path = (
         Path(font_path)
         if font_path
@@ -205,13 +209,13 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
             str(value or "")
             .replace("\r\n", "\n")
             .replace("\r", "\n")
-            .replace("\t", "   ")
+            .replace("\t", "    ")
         )
 
         if any(
             ord(character) not in glyphs
             for character in text
-            if text != "\n"
+            if character != "\n"
         ):
             raise InvoicePdfError(
                 "Ada karakter yang belum didukung font PDF. "
@@ -255,13 +259,13 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
             splitInRow = 1,
         )
 
-        commands = {
+        commands = [
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 7),
             ("RIGHTPADDING", (0, 0), (-1, -1), 7),
             ("TOPPADDING", (0, 0), (-1, -1), 6),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        }
+        ]
 
         if header:
             commands += [
@@ -334,7 +338,7 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
     ]]
 
     for item in invoice["items"]:
-        description = item["name_snapshot"]
+        description = f"{item['position']}. {item['name_snapshot']}"
 
         if item["description"]:
             description += "\n" + item["description"]
@@ -369,7 +373,7 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
     ]
 
     settlement_labels = {
-        "UNPAID": "Belum Dibayar",
+        "UNPAID": "Belum dibayar",
         "PARTIAL": "Dibayar sebagian",
         "PAID": "Lunas",
     }
@@ -385,10 +389,10 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
             ),
             p(
                 "Status: "
-                + settlement_labels[summary["settle_status"]]
+                + settlement_labels[summary["settlement_status"]]
             ),
             p(
-                "Saldo pembayar per "
+                "Saldo pembayaran per "
                 + datetime.now().strftime("%Y-%m-%d %H:%M")
             ),
         ])
@@ -415,11 +419,11 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
     )
 
     if bank:
-        story.extend([
+        story.append(KeepTogether([
             Spacer(1, 4 * mm),
             p("Informasi transfer"),
             *bank,
-        ])
+        ]))
 
     image_cells = []
 
@@ -437,7 +441,7 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
 
         if image:
             image.hAlign = "LEFT"
-            image.cells.append([p(label), image])
+            image_cells.append([p(label), image])
 
     if image_cells:
         story.append(
@@ -456,7 +460,7 @@ def build_invoice_pdf(database_path, invoice_id, *, font_path = None):
 
     def footer(canvas, document):
         canvas.saveState()
-        canvas.setFont(font_name, 0)
+        canvas.setFont(font_name, 8)
         canvas.setFillColor(colors.HexColor("#566274"))
 
         canvas.drawString(

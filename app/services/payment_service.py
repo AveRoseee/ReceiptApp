@@ -195,4 +195,7 @@ def void_payment(connection, payment_id: int, reason: str) -> dict:
         result = get_payment(connection, payment_id)
 
     return result
-    
+
+
+# Preserve the existing idempotent API and expose the business operation name.
+create_payment = record_payment

@@ -65,9 +65,10 @@ def insert_payment(connection, invoice_id, data: Mapping):
 def list_payments(connection, invoice_id, include_void = True, limit = 100, offset = 0):
     rows  = connection.execute(
         """
-        SELECT * FROM payments
-        WHERE invoice_id = ? AND (? = 1 OR status = 'VALID')
-        ORDER BY payment_date DESC, id DESC
+        SELECT p.*, r.id AS receipt_id, r.number AS receipt_number, r.status AS receipt_status
+        FROM payments p LEFT JOIN receipts r ON r.payment_id = p.id
+        WHERE p.invoice_id = ? AND (? = 1 OR p.status = 'VALID')
+        ORDER BY p.payment_date DESC, p.id DESC
         LIMIT ? OFFSET ?
         """,
         (invoice_id, int(include_void), limit, offset),
@@ -129,5 +130,3 @@ def record_receipt_event(connection, receipt_id, details):
         """,
         (receipt_id, json.dumps(details, ensure_ascii = False, sort_keys = True))
     )
-
-    

@@ -4,11 +4,15 @@ import sqlite3
 import flet as ft
 
 from app.database import initialize_database
+from app.components.app_shell import AppShell
+from app.components.design import theme, BACKGROUND, polish
 from app.views.business_profile_view import build_business_profile_view
 from app.views.customer_view import build_customer_view
 from app.views.catalog_view import build_catalog_view
 from app.views.quotation_view import build_quotation_view
 from app.views.invoice_view import build_invoice_view
+from app.views.settings_view import build_settings_view
+from app.views.dashboard_view import build_dashboard_view
 
 
 logger = logging.getLogger(__name__)
@@ -16,16 +20,33 @@ logger = logging.getLogger(__name__)
 
 def main(page: ft.Page) -> None:
     page.title = "DokumenUsaha"
-    page.window.width = 1000
-    page.window.height = 700
+    page.window.width = 1280
+    page.window.height = 850
 
-    page.padding = 24
+    page.padding = 0
+    page.bgcolor = BACKGROUND
+    page.theme = theme()
     page.theme_mode = ft.ThemeMode.LIGHT
 
     try:
         database_path = initialize_database()
 
+        def reload_after_restore():
+            page.controls.clear()
+            page.services.clear()
+            main(page)
+            page.update()
+
+        def navigate(key, action=None):
+            from types import SimpleNamespace
+            switch_view(SimpleNamespace(control=SimpleNamespace(data=key)))
+            handler = getattr(views[key].data, "navigate", None)
+            if handler:
+                handler(action)
+            page.update()
+
         views = {
+            "dashboard": build_dashboard_view(page, database_path, navigate),
             "profile": build_business_profile_view(
                 page,
                 database_path,
@@ -49,7 +70,8 @@ def main(page: ft.Page) -> None:
             "quotations": build_quotation_view(
                 page,
                 database_path
-            )
+            ),
+            "settings": build_settings_view(page, database_path, reload_after_restore),
         }
         
     except (sqlite3.Error, OSError, ValueError):
@@ -75,43 +97,13 @@ def main(page: ft.Page) -> None:
         if callable(refresh):
             refresh()
 
+        polish(views[selected])
+        shell.select(selected)
         page.update()
 
-    labels = {
-        "profile": "Profil Usaha",
-        "customers": "Pelanggan",
-        "catalog": "Katalog",
-        "invoices": "Invoice",
-        "quotations": "Penawaran",
-    }
-
-    navigation_buttons = {
-        key: ft.TextButton(
-            content = label,
-            data = key,
-            disabled = key == "profile",
-            on_click = switch_view,
-        )
-        for key, label in labels.items()
-    }
-
-    for key, view in views.items():
-        view.visible = key == "profile"
-
-    page.add(
-        ft.Column(
-            expand = True,
-            spacing = 16,
-            controls = [
-                ft.Row(
-                    wrap = True,
-                    controls = list(navigation_buttons.values()), 
-                ),
-                ft.Divider(),
-                *views.values(),
-            ]
-        )
-    )
+    shell = AppShell(page, views, switch_view)
+    navigation_buttons = shell.buttons
+    page.add(shell.control)
 
 
 if __name__ == "__main__":

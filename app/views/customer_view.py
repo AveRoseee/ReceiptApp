@@ -4,6 +4,7 @@ import logging
 import sqlite3
 
 import flet as ft
+from app.components.design import SURFACE, BORDER, panel
 
 from app.database import connect
 from app.services import customer_service as service
@@ -70,7 +71,7 @@ def build_customer_view(
         weight=ft.FontWeight.BOLD,
     )
 
-    customer_list = ft.Column(spacing=12)
+    customer_list = ft.Column(spacing=12, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
     page_info = ft.Text()
 
     search_input = ft.TextField(
@@ -204,7 +205,8 @@ def build_customer_view(
         return ft.Container(
             padding=16,
             border_radius=8,
-            bgcolor=ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             content=ft.Column(
                 spacing=8,
                 controls=[
@@ -400,8 +402,7 @@ def build_customer_view(
     search_input.on_submit = handle_search
     archive_checkbox.on_change = handle_search
 
-    editor = ft.Column(
-        visible=False,
+    editor = panel(ft.Column(horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         spacing=16,
         controls=[
             form_title,
@@ -424,7 +425,7 @@ def build_customer_view(
                 ],
             ),
         ],
-    )
+    ), visible=False)
 
     list_section = ft.Column(
         spacing=16,
@@ -456,7 +457,9 @@ def build_customer_view(
 
     refresh_list()
 
+    refresh_list.navigate = lambda action: handle_new(None) if action == "new" else None
     return ft.Column(
+        data=refresh_list,
         expand = True,
         scroll = ft.ScrollMode.AUTO,
         spacing = 20,

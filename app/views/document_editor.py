@@ -5,6 +5,7 @@ import re
 import sqlite3
 
 import flet as ft
+from app.components.design import SURFACE, BORDER, panel, form_row, polish
 
 from app.database import connect
 from app.services import catalog_service, customer_service
@@ -102,7 +103,7 @@ class DocumentEditor:
         )
         self.message = ft.Text(color=ft.Colors.RED_700)
         self.summary = ft.Text()
-        self.item_list = ft.Column(spacing=12)
+        self.item_list = ft.Column(spacing=12, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
         self.customer = ft.Dropdown(
             label="Pelanggan",
@@ -157,8 +158,7 @@ class DocumentEditor:
             on_click=self.save,
         )
 
-        self.control = ft.Column(
-            visible=False,
+        self.control = panel(ft.Column(horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             spacing=16,
             controls=[
                 self.title,
@@ -169,8 +169,7 @@ class DocumentEditor:
                     "2 angka desimal."
                 ),
                 self.customer,
-                self.issue_date,
-                self.deadline,
+                form_row(self.issue_date, self.deadline),
                 ft.Divider(),
                 self.catalog_choice,
                 ft.Row(
@@ -188,12 +187,9 @@ class DocumentEditor:
                 ),
                 self.item_list,
                 ft.Divider(),
-                self.discount_type,
-                self.discount,
-                self.tax,
+                form_row(self.discount_type, self.discount, self.tax, columns=4),
                 self.summary,
-                self.notes,
-                self.terms,
+                form_row(self.notes, self.terms),
                 self.message,
                 ft.Row(
                     controls=[
@@ -205,9 +201,10 @@ class DocumentEditor:
                     ],
                 ),
             ],
-        )
+        ), visible=False)
 
     def open(self, document_id=None):
+        polish(self.control)
         with closing(connect(self.database_path)) as connection:
             draft = (
                 self.get_document(connection, document_id)
@@ -395,11 +392,13 @@ class DocumentEditor:
         row["control"] = ft.Container(
             padding=12,
             border_radius=8,
-            bgcolor=ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             content=ft.Column(
                 controls=[
                     ft.Text(source),
-                    *fields.values(),
+                    form_row(fields["name_snapshot"], fields["description"]),
+                    form_row(fields["quantity_milli"], fields["unit"], fields["unit_price"], columns=4),
                     total,
                     ft.TextButton(
                         content="Hapus Item",
@@ -409,6 +408,7 @@ class DocumentEditor:
             ),
         )
 
+        polish(row["control"])
         self.rows.append(row)
         self.item_list.controls.append(row["control"])
 

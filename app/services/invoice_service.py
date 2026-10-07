@@ -194,6 +194,7 @@ def update_draft(connection, invoice_id: int, data: Mapping) -> dict:
 def list_invoices(
     connection, search: str = "", status: str | None = None,
     limit: int = 100, offset: int = 0,
+    *, date_from=None, date_to=None, payment_status=None,
 ) -> list[dict]:
     search = _text(search, "Pencarian")
     if status is not None:
@@ -203,8 +204,19 @@ def list_invoices(
     if type(limit) is not int or not 1 <= limit <= 100:
         raise InvoiceValidationError("Limit harus berupa bilangan bulat 1 sampai 100.")
     _integer(offset, "Offset", minimum=0)
+    if date_from is not None:
+        date_from = _date(date_from, "Tanggal awal")
+    if date_to is not None:
+        date_to = _date(date_to, "Tanggal akhir")
+    if date_from and date_to and date_from > date_to:
+        raise InvoiceValidationError("Tanggal awal tidak boleh setelah tanggal akhir.")
+    if payment_status is not None:
+        payment_status = _text(payment_status, "Status pembayaran", required=True).upper()
+        if payment_status not in {"UNPAID", "PARTIAL", "PAID", "OVERDUE"}:
+            raise InvoiceValidationError("Status pembayaran tidak dikenal.")
     return repository.list_invoices(
         connection, search=search, status=status, limit=limit, offset=offset,
+        date_from=date_from, date_to=date_to, payment_status=payment_status,
     )
 
 
@@ -329,3 +341,36 @@ def publish_invoice(database_path: str | Path, invoice_id: int) -> dict:
 
     return result
 
+
+def duplicate_as_draft(connection, invoice_id, *, issue_date=None):
+    """Copy historical line values; never reuse the official number."""
+    with transaction(connection):
+        source = get_invoice(connection, invoice_id)
+        if source["document_status"] != "ISSUED":
+            raise InvoiceStateError("Hanya invoice terbit yang dapat diduplikasi.")
+        data = {key: source[key] for key in HEADER_INPUTS}
+        data.update(issue_date=issue_date or date.today().isoformat(), due_date=None)
+        data["items"] = [
+            {**{key: item[key] for key in ITEM_INPUTS}, "catalog_item_id": None}
+            for item in source["items"]
+        ]
+        header, items = _prepare(connection, data)
+        new_id = repository.insert_draft(connection, header)
+        repository.replace_items(connection, new_id, items)
+        repository.record_event(connection, new_id, "DRAFT_CREATED",
+                                {"source_invoice_id": invoice_id})
+        return get_invoice(connection, new_id)
+
+
+def cancel_invoice(connection, invoice_id, reason):
+    reason = _text(reason, "Alasan pembatalan", required=True)
+    with transaction(connection):
+        current = get_invoice(connection, invoice_id)
+        if current["document_status"] == "CANCELLED":
+            raise InvoiceStateError("Invoice sudah dibatalkan.")
+        if repository.has_valid_payments(connection, invoice_id):
+            raise InvoiceStateError("Batalkan pembayaran aktif terlebih dahulu.")
+        repository.cancel_invoice(connection, invoice_id)
+        repository.record_event(connection, invoice_id, "INVOICE_CANCELLED",
+                                {"reason": reason})
+        return get_invoice(connection, invoice_id)

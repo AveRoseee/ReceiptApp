@@ -5,10 +5,13 @@ import sqlite3
 from uuid import uuid4
 
 import flet as ft
+from app.components.design import SURFACE, BORDER
 
 
 from app.database import connect
 from app.services import payment_service as service
+from app.services import receipt_service
+from app.components.document_pdf_actions import DocumentPdfActions
 from app.views.document_editor import parse_number
 
 
@@ -46,6 +49,7 @@ class PaymentPanel:
 
         self.pending = {}
         self.void_dialog = None
+        self.receipt_pdf = DocumentPdfActions(page, database_path, "RECEIPT")
 
         self.heading = ft.Text(
             "Pembayaran",
@@ -322,7 +326,8 @@ class PaymentPanel:
         return ft.Container(
             padding = 12,
             border_radius = 8,
-            bgcolor = ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             content = ft.Column(
                 spacing = 6,
                 controls = [
@@ -356,9 +361,56 @@ class PaymentPanel:
                         visible = active,
                         on_click = self.ask_void,
                     ),
+                    ft.TextButton(
+                        content="Lihat Kwitansi" if payment.get("receipt_id") else "Buat Kwitansi",
+                        data=payment["id"],
+                        visible=active or bool(payment.get("receipt_id")),
+                        on_click=self.handle_receipt,
+                    ),
                 ],
             ),
         )
+
+    def handle_receipt(self, event):
+        if event.control.disabled:
+            return
+        event.control.disabled = True
+        self.page.update()
+        try:
+            with closing(connect(self.database_path)) as connection:
+                receipt = receipt_service.get_by_payment(connection, event.control.data)
+                if receipt is None:
+                    receipt = receipt_service.issue_receipt(connection, event.control.data)
+            data = receipt_service.read_snapshot(receipt["document_snapshot"])
+            payment = data["payment"]
+            self.receipt_pdf.show(receipt)
+            body = ft.Column(tight=True, controls=[
+                ft.Text(f"Status: {'Aktif' if receipt['status'] == 'VALID' else 'Dibatalkan'}"),
+                ft.Text(f"Invoice: {data['invoice']['number']}"),
+                ft.Text(f"Tanggal pembayaran: {payment['payment_date']}"),
+                ft.Text(f"Usaha: {data['business']['name']}"),
+                ft.Text(f"Pelanggan: {data['customer']['name']}"),
+                ft.Text(rupiah(payment["amount"])),
+                ft.Text(data["amount_words"]),
+                ft.Text(f"Metode: {METHODS[payment['method']]}"),
+                ft.Text(f"Referensi: {payment['reference'] or '-'}"),
+                ft.Text(f"Catatan: {payment['notes'] or '-'}"),
+                ft.Text(receipt["void_reason"] or ""),
+                self.receipt_pdf.control,
+            ])
+            self.page.show_dialog(ft.AlertDialog(
+                modal=True, scrollable=True, title=ft.Text(receipt["number"]), content=body,
+                actions=[ft.TextButton(content="Tutup", on_click=lambda e: self.page.pop_dialog())],
+            ))
+            self.refresh()
+        except (ValueError, LookupError) as error:
+            self.notify(str(error))
+        except (sqlite3.Error, OSError):
+            logger.exception("Gagal membuat/memuat kwitansi")
+            self.notify("Kwitansi belum dapat diproses. Silakan coba kembali.")
+        finally:
+            event.control.disabled = False
+            self.page.update()
 
     def lock_input(self, locked):
         for control in self.inputs:

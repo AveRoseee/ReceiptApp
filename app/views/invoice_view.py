@@ -7,6 +7,7 @@ import sqlite3
 
 # Flet
 import flet as ft
+from app.components.design import SURFACE, BORDER, PRIMARY, panel, form_row
 
 # App
 from app.database import connect
@@ -19,6 +20,7 @@ from app.services.document_number_service import DocumentNumberError
 # Views
 from app.views.invoice_editor import InvoiceEditor
 from app.views.payment_panel import PaymentPanel
+from app.components.document_pdf_actions import DocumentPdfActions
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,15 @@ def build_invoice_view(
     current_search = ""
     current_status = None
     publish_pending = False
+    extra_filters = {"date_from": None, "date_to": None, "payment_status": None}
+    date_from_input = ft.TextField(label="Tanggal awal (YYYY-MM-DD)", col={"xs": 12, "md": 4})
+    date_to_input = ft.TextField(label="Tanggal akhir (YYYY-MM-DD)", col={"xs": 12, "md": 4})
+    payment_filter = ft.Dropdown(label="Status Pembayaran", value="ALL", col={"xs": 12, "md": 4}, options=[
+        ft.DropdownOption(key=key, text=label) for key, label in (
+            ("ALL", "Semua pembayaran"), ("UNPAID", "Belum Dibayar"),
+            ("PARTIAL", "Dibayar Sebagian"), ("PAID", "Lunas"), ("OVERDUE", "Jatuh Tempo"),
+        )
+    ])
 
     search_input = ft.TextField(
         label = "Cari invoice",
@@ -103,10 +114,11 @@ def build_invoice_view(
         ],
     )
 
-    invoice_list = ft.Column(spacing = 12)
+    invoice_list = ft.Column(spacing=12, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
     page_info = ft.Text()
     detail_body = ft.Column(spacing = 16)
     payment_panel = PaymentPanel(page, database_path)
+    pdf_actions = DocumentPdfActions(page, database_path, "INVOICE")
 
     def notify(message: str) -> None:
         page.show_dialog(
@@ -177,7 +189,8 @@ def build_invoice_view(
     def item_section(item: dict) -> ft.Container:
         return ft.Container(
             padding = 12,
-            bgcolor = ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             border_radius = 8,
             content = ft.Column(
                 spacing = 6,
@@ -340,8 +353,21 @@ def build_invoice_view(
             notify("Detail invoice belum dapat dimuat.")
             return
 
-        detail_body.controls = controls
+        summary_index = next(index for index, control in enumerate(controls)
+            if isinstance(control, ft.Text) and str(control.value).startswith("Subtotal: "))
+        detail_body.controls = [
+            panel(ft.Column(spacing=12, controls=[controls[0],
+                ft.Row(wrap=True, spacing=24, controls=controls[1:4])])),
+            form_row(panel(controls[5]), panel(controls[6])),
+            panel(ft.Column(spacing=12, horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                            controls=controls[8:summary_index - 1])),
+            panel(ft.Column(spacing=12, controls=controls[summary_index:])),
+        ]
         payment_panel.load(invoice["id"])
+        pdf_actions.show(invoice)
+        duplicate_button.data = cancel_invoice_button.data = invoice["id"]
+        duplicate_button.visible = invoice["document_status"] == "ISSUED"
+        cancel_invoice_button.visible = invoice["document_status"] != "CANCELLED"
 
         publish_button.data = invoice["id"]
         publish_button.visible = (
@@ -485,6 +511,71 @@ def build_invoice_view(
     )
 
 
+    def handle_duplicate(event):
+        if event.control.disabled:
+            return
+        event.control.disabled = True
+        page.update()
+        try:
+            with closing(connect(database_path)) as connection:
+                draft = service.duplicate_as_draft(connection, event.control.data)
+            refresh_list()
+            show_detail(draft["id"])
+        except (ValueError, LookupError) as error:
+            notify(str(error))
+        except (sqlite3.Error, OSError):
+            logger.exception("Gagal menduplikasi invoice")
+            notify("Draft belum dapat dibuat.")
+        finally:
+            event.control.disabled = False
+            page.update()
+
+    def handle_cancel_invoice(event):
+        invoice_id = event.control.data
+        reason = ft.TextField(label="Alasan pembatalan invoice", multiline=True)
+        error_text = ft.Text(color=ft.Colors.RED_700)
+        handled = False
+
+        def cancel(event):
+            nonlocal handled
+            handled = True
+            page.pop_dialog()
+
+        def confirm(event):
+            nonlocal handled
+            if handled:
+                return
+            confirm_button.disabled = True
+            page.update()
+            try:
+                with closing(connect(database_path)) as connection:
+                    service.cancel_invoice(connection, invoice_id, reason.value or "")
+                handled = True
+                page.pop_dialog()
+                refresh_list()
+                show_detail(invoice_id)
+            except (ValueError, LookupError) as error:
+                error_text.value = str(error)
+            except (sqlite3.Error, OSError):
+                logger.exception("Gagal membatalkan invoice")
+                error_text.value = "Invoice belum dapat dibatalkan. Coba kembali."
+            finally:
+                confirm_button.disabled = False
+                page.update()
+
+        confirm_button = ft.Button(content="Ya, Batalkan Invoice", on_click=confirm)
+        page.show_dialog(ft.AlertDialog(
+            modal=True, title=ft.Text("Batalkan Invoice?"),
+            content=ft.Column(tight=True, controls=[
+                ft.Text("Invoice dibatalkan tanpa menghapus riwayat. Tindakan ini tidak dapat dibatalkan."),
+                reason, error_text,
+            ]),
+            actions=[ft.TextButton(content="Kembali", on_click=cancel), confirm_button],
+        ))
+
+    duplicate_button = ft.Button(content="Duplikasi sebagai Draft", on_click=handle_duplicate)
+    cancel_invoice_button = ft.TextButton(content="Batalkan Invoice", on_click=handle_cancel_invoice)
+
     def invoice_card(invoice: dict) -> ft.Container:
         title = (
             invoice["number"]
@@ -495,10 +586,11 @@ def build_invoice_view(
             invoice["document_status"],
         )
 
-        return ft.Container(
+        card = ft.Container(
             padding = 16,
             border_radius = 8,
-            bgcolor = ft.Colors.GREY_100,
+            bgcolor=SURFACE,
+            border=ft.Border.all(1, BORDER),
             content = ft.Column(
                 spacing = 8,
                 controls = [
@@ -536,6 +628,17 @@ def build_invoice_view(
             )
         )
 
+        elements = card.content.controls
+        card.content = ft.ResponsiveRow(spacing=16, run_spacing=12, controls=[
+            ft.Column(col={"xs": 12, "md": 5}, spacing=6, controls=elements[:3]),
+            ft.Column(col={"xs": 12, "md": 3}, controls=[elements[3]]),
+            ft.Row(col={"xs": 12, "md": 4}, wrap=True, controls=elements[4:]),
+        ])
+        elements[3].size = 20
+        elements[3].weight = ft.FontWeight.W_600
+        elements[3].color = PRIMARY
+        return card
+
     def refresh_list() -> None:
         nonlocal offset
 
@@ -547,6 +650,7 @@ def build_invoice_view(
                     status = current_status,
                     limit = PAGE_SIZE + 1,
                     offset = offset,
+                    **extra_filters,
                 )
 
                 if not invoices and offset > 0:
@@ -557,13 +661,16 @@ def build_invoice_view(
                         status=current_status,
                         limit=PAGE_SIZE + 1,
                         offset=0,
+                        **extra_filters,
                     )
 
-        except (
-            service.InvoiceValidationError,
-            sqlite3.Error,
-            OSError,
-        ): 
+        except service.InvoiceValidationError as error:
+            invoice_list.controls = [ft.Text(str(error), color=ft.Colors.RED_700)]
+            previous_button.disabled = True
+            next_button.disabled = True
+            page_info.value = ""
+            return
+        except (sqlite3.Error, OSError):
             logger.exception(
                 "Gagal memuat daftar invoice"
             )
@@ -608,6 +715,11 @@ def build_invoice_view(
 
         offset = 0
         current_search = (search_input.value or "").strip()
+        extra_filters.update(
+            date_from=(date_from_input.value or "").strip() or None,
+            date_to=(date_to_input.value or "").strip() or None,
+            payment_status=None if payment_filter.value == "ALL" else payment_filter.value,
+        )
         current_status = (
             None
             if status_filter.value == "ALL"
@@ -702,6 +814,8 @@ def build_invoice_view(
 
     search_input.on_submit = handle_search
     status_filter.on_select = handle_search
+    payment_filter.on_select = handle_search
+    date_from_input.on_submit = date_to_input.on_submit = handle_search
 
     list_section = ft.Column(
         spacing = 16,
@@ -721,6 +835,7 @@ def build_invoice_view(
                 content = "Cari",
                 on_click = handle_search,
             ),
+            ft.ResponsiveRow(controls=[date_from_input, date_to_input, payment_filter]),
             invoice_list,
             page_info,
             ft.Row(
@@ -742,6 +857,9 @@ def build_invoice_view(
             ),
             detail_body,
             publish_button,
+            pdf_actions.control,
+            duplicate_button,
+            cancel_invoice_button,
             payment_panel.control,
         ],
     )
@@ -775,5 +893,19 @@ def build_invoice_view(
         if detail_section.visible:
             payment_panel.refresh()
 
+    def navigate(action):
+        from types import SimpleNamespace
+        if action == "new":
+            handle_open_editor(SimpleNamespace(control=SimpleNamespace(data=None)))
+        elif action == "payments":
+            handle_back(None)
+            status_filter.value = "ISSUED"
+            payment_filter.value = "ALL"
+            date_from_input.value = date_to_input.value = search_input.value = ""
+            handle_search(None)
+        elif type(action) is int:
+            show_detail(action)
+
+    refresh_view.navigate = navigate
     view.data = refresh_view
     return view
